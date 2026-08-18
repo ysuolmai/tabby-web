@@ -23,6 +23,7 @@ export class SocketProxy {
   authToken: string
   webSocket: WebSocket|null
   initialBuffers: any[] = []
+  gatewayConnected = false
   options: {
     host: string
     port: number
@@ -74,6 +75,7 @@ export class SocketProxy {
     }
     try {
       this.webSocket = new WebSocket(this.url)
+      this.gatewayConnected = false
     } catch (err) {
       this.close(err)
       return
@@ -108,6 +110,7 @@ export class SocketProxy {
         port: this.options.port,
       })
     } else if (msg._ === 'connected') {
+      this.gatewayConnected = true
       this.connect$.next()
       this.connect$.complete()
       for (const b of this.initialBuffers) {
@@ -127,7 +130,9 @@ export class SocketProxy {
   }
 
   write (chunk: Buffer): void {
-    if (!this.webSocket?.readyState) {
+    if (!this.webSocket ||
+        this.webSocket.readyState !== WebSocket.OPEN ||
+        !this.gatewayConnected) {
       this.initialBuffers.push(chunk)
     } else {
       this.webSocket.send(chunk)
@@ -135,6 +140,7 @@ export class SocketProxy {
   }
 
   close (error?: Error): void {
+    this.gatewayConnected = false
     this.webSocket?.close()
     if (error) {
       this.error$.next(error)

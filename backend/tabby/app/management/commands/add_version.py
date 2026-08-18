@@ -10,6 +10,24 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 
+def patch_browser_ssh_bundle(bundle_path):
+    """Make the bundled ssh2 client serialize sshpk signatures correctly."""
+    source_path = bundle_path / "dist" / "index.js"
+    source = source_path.read_text()
+    old = """    return signature;
+  },
+  sendPacket: (proto, packet, bypass) => {"""
+    new = """    if (signature && typeof signature.toBuffer === 'function') {
+      return signature.toBuffer('raw');
+    }
+    return signature;
+  },
+  sendPacket: (proto, packet, bypass) => {"""
+    if old not in source:
+        raise RuntimeError(f"Unable to find ssh2 signature conversion in {source_path}")
+    source_path.write_text(source.replace(old, new, 1))
+
+
 class Command(BaseCommand):
     help = "Downloads a new app version"
 
@@ -59,6 +77,9 @@ class Command(BaseCommand):
                         shutil.move(
                             Path(extraction_tmp) / "package", plugin_final_target
                         )
+
+                    if plugin == "tabby-ssh":
+                        patch_browser_ssh_bundle(plugin_final_target)
 
             if fs.exists(target):
                 fs.rm(target, recursive=True)
