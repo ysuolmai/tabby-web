@@ -31,7 +31,11 @@ export class SettingsModalComponent {
   }
 
   async apply () {
-    Object.assign(this.loginService.user, this.user)
+    const user = this.loginService.user
+    if (!user) {
+      return
+    }
+    Object.assign(user, this.user)
     this.modalInstance.close()
     await this.loginService.updateUser()
   }

@@ -14,6 +14,11 @@ This is the Tabby terminal, served as a web app. It also provides the config syn
 
 Tabby Web serves the [Tabby Terminal](https://github.com/Eugeny/tabby) as a web application while managing multiple config files, authentication, and providing TCP connections via a [separate gateway service](https://github.com/Eugeny/tabby-connection-gateway).
 
+The Docker build bundles `1.0.187-nightly.1` by default. This release uses the
+browser transport bridge required by Tabby Web. Newer desktop releases may
+bundle native SSH bindings and must be verified for browser compatibility
+before adding them to a Web deployment.
+
 # Documentation
 
 - **[Deployment Guide](docs/DEPLOYMENT.md)** - Complete guide for production deployment
@@ -158,7 +163,7 @@ When registering your app in Azure portal, select "Accounts in this organization
 
 ## Adding Tabby app versions
 
-* `docker-compose run tabby /manage.sh add_version 1.0.163`
+* `docker-compose run tabby /manage.sh add_version 1.0.187-nightly.1`
 
 You can find the available version numbers [here](https://www.npmjs.com/package/tabby-web-container).
 
@@ -180,7 +185,7 @@ For the backend:
 cd backend
 poetry install
 ./manage.py migrate # set up the database
-./manage.py add_version 1.0.156-nightly.2 # install an app distribution
+./manage.py add_version 1.0.187-nightly.1 # install an app distribution
 PORT=9000 poetry run gunicorn # optionally with --reload
 ```
 

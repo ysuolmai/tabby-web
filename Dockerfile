@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM node:12-alpine AS frontend-build
+FROM node:18-alpine AS frontend-build
 WORKDIR /app
 COPY frontend/package.json frontend/yarn.lock ./
 RUN yarn install --frozen-lockfile --network-timeout 1000000
@@ -10,7 +10,7 @@ COPY frontend/theme theme
 RUN yarn run build
 RUN yarn run build:server
 
-FROM node:12-alpine AS frontend
+FROM node:18-alpine AS frontend
 WORKDIR /app
 COPY --from=frontend-build /app/build build
 COPY --from=frontend-build /app/build-server build-server
@@ -41,6 +41,8 @@ COPY backend/manage.py backend/gunicorn.conf.py ./
 COPY backend/tabby tabby
 COPY --from=frontend /app/build /frontend
 
+# Tabby Web relies on the browser transport bridge from this release. Newer
+# desktop releases bundle native SSH bindings and are not browser-compatible.
 ARG BUNDLED_TABBY=1.0.187-nightly.1
 
 RUN FRONTEND_BUILD_DIR=/frontend /venv/*/bin/python ./manage.py collectstatic --noinput

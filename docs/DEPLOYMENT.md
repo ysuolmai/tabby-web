@@ -29,7 +29,7 @@ export DOCKER_BUILDKIT=1
 docker-compose up -d
 
 # Add a Tabby version
-docker-compose exec tabby /manage.sh add_version 1.0.208
+docker-compose exec tabby /manage.sh add_version 1.0.187-nightly.1
 
 # Access at http://localhost:9090
 ```
@@ -232,7 +232,7 @@ After deployment, add Tabby app versions:
 
 ```bash
 # Add a specific version
-docker-compose exec tabby /manage.sh add_version 1.0.208
+docker-compose exec tabby /manage.sh add_version 1.0.187-nightly.1
 
 # Check available versions at:
 # https://www.npmjs.com/package/tabby-web-container
