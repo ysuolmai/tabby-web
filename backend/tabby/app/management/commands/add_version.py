@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 
 def patch_browser_ssh_bundle(bundle_path):
-    """Restore Ed25519 private-key support in ssh2's browser bundle."""
+    """Repair browser-side SSH public-key authentication."""
     source_path = bundle_path / "dist" / "index.js"
     source = source_path.read_text()
     old = """    return signature;
@@ -34,8 +34,57 @@ const nacl = __webpack_require__(/*! tweetnacl */ 3492);""",
             "tweetnacl import",
         ),
         (
+            """      return function sign(data, algo) {
+        const pem = this[SYM_PRIV_PEM];
+        if (pem === null)
+          return new Error('No private key available');
+        if (!algo || typeof algo !== 'string')
+          algo = this[SYM_HASH_ALGO];
+        try {
+          return sign_(algo, data, pem);
+        } catch (ex) {
+          return ex;
+        }
+      };""",
+            """      return function sign(data, algo) {
+        if (this.type === 'ssh-ed25519' && this._edPrivateKey) {
+          return Buffer.from(nacl.sign.detached(
+            new Uint8Array(data),
+            new Uint8Array(this._edPrivateKey)
+          ));
+        }
+        const pem = this[SYM_PRIV_PEM];
+        if (pem === null)
+          return new Error('No private key available');
+        if (!algo || typeof algo !== 'string')
+          algo = this[SYM_HASH_ALGO];
+        if (this.type === 'ssh-rsa' && !/^RSA-/i.test(algo))
+          algo = `RSA-${algo.toUpperCase()}`;
+        else if (this.type === 'ssh-dss' && !/^DSA-/i.test(algo))
+          algo = `DSA-${algo.toUpperCase()}`;
+        try {
+          return sign_(algo, data, pem);
+        } catch (ex) {
+          return ex;
+        }
+      };""",
+            "native Ed25519 signer",
+        ),
+        (
             """    return function sign(data, algo) {
-      const pem = this[SYM_PRIV_PEM];""",
+      const pem = this[SYM_PRIV_PEM];
+      if (pem === null)
+        return new Error('No private key available');
+      if (!algo || typeof algo !== 'string')
+        algo = this[SYM_HASH_ALGO];
+      const signature = createSign(algo);
+      signature.update(data);
+      try {
+        return signature.sign(pem);
+      } catch (ex) {
+        return ex;
+      }
+    };""",
             """    return function sign(data, algo) {
       if (this.type === 'ssh-ed25519' && this._edPrivateKey) {
         return Buffer.from(nacl.sign.detached(
@@ -43,7 +92,23 @@ const nacl = __webpack_require__(/*! tweetnacl */ 3492);""",
           new Uint8Array(this._edPrivateKey)
         ));
       }
-      const pem = this[SYM_PRIV_PEM];""",
+      const pem = this[SYM_PRIV_PEM];
+      if (pem === null)
+        return new Error('No private key available');
+      if (!algo || typeof algo !== 'string')
+        algo = this[SYM_HASH_ALGO];
+      if (this.type === 'ssh-rsa' && !/^RSA-/i.test(algo))
+        algo = `RSA-${algo.toUpperCase()}`;
+      else if (this.type === 'ssh-dss' && !/^DSA-/i.test(algo))
+        algo = `DSA-${algo.toUpperCase()}`;
+      const signature = createSign(algo);
+      signature.update(data);
+      try {
+        return signature.sign(pem);
+      } catch (ex) {
+        return ex;
+      }
+    };""",
             "browser Ed25519 signer",
         ),
         (
@@ -77,6 +142,42 @@ const nacl = __webpack_require__(/*! tweetnacl */ 3492);""",
       key._edPrivateKey = edPrivate;
       keys.push(key);""",
             "Ed25519 private material attachment",
+        ),
+        (
+            """    if (keyType === 'ssh-rsa') {
+      for (const algo of ['rsa-sha2-512', 'rsa-sha2-256']) {
+        if (this._remoteHostKeyAlgorithms.includes(algo)) {
+         keyType = algo;
+         break;
+        }
+      }
+    }""",
+            """    if (keyType === 'ssh-rsa') {
+      // Host-key algorithms are unrelated to RSA user-auth signatures.
+      // Modern OpenSSH servers accept rsa-sha2 even when their host key is
+      // ECDSA or Ed25519.
+      keyType = 'rsa-sha2-512';
+    }""",
+            "RSA user-auth algorithm selection",
+        ),
+        (
+            """              let signatureAlgo;
+              if (curAuth.key.type === 'ssh-rsa') {
+                if (this._protocol._remoteHostKeyAlgorithms
+                    .includes('rsa-sha2-512')) {
+                  signatureAlgo = 'sha512';
+                } else if (this._protocol._remoteHostKeyAlgorithms
+                    .includes('rsa-sha2-256')) {
+                  signatureAlgo = 'sha256';
+                }
+              }""",
+            """              let signatureAlgo;
+              if (curAuth.key.type === 'ssh-rsa') {
+                // Keep the hash aligned with authPK(), independently of
+                // the server host-key algorithm list.
+                signatureAlgo = 'sha512';
+              }""",
+            "RSA signature hash selection",
         ),
     ]
     for old, new, name in extra_patches:
